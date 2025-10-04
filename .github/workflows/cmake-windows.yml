@@ -1,48 +1,59 @@
 name: CMake (Windows)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   build-win-debug:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # Устанавливаем Qt6 (требуется проекту)
-      - name: Install Qt 6
-        uses: jurplel/install-qt-action@v4
+      # MSYS2 с нужными пакетами (gcc, cmake, ninja, Qt6, SDL2, boost, vorbis)
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
         with:
-          version: 6.5.3
-          host: windows
-          target: desktop
-          arch: win64_msvc2019_64
+          release: true
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-libvorbis
+            mingw-w64-x86_64-libogg
 
       - name: Configure (Debug)
-        shell: pwsh
-        run: cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Debug
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+            -DUSE_PCH=ON
 
       - name: Build (Debug)
-        shell: pwsh
+        shell: msys2 {0}
         run: cmake --build build --config Debug --parallel
 
-      # Пакуем exe + dll + data (минимально)
+      # Упаковываем exe, dll и папку data
       - name: Pack Debug
-        shell: pwsh
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Path out -Force | Out-Null
-          Compress-Archive -Path `
-            build\**\*.exe, `
-            build\**\*.dll, `
-            data\* `
-            -DestinationPath out\OpenApoc-win64-debug.zip -Force
+          mkdir -p out
+          7z a -tzip out/OpenApoc-win64-debug.zip ./build/*.exe ./build/*.dll ./data/*
 
       - name: Upload Debug Artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenApoc-win64-debug
-          path: out\OpenApoc-win64-debug.zip
+          path: out/OpenApoc-win64-debug.zip
           if-no-files-found: warn
