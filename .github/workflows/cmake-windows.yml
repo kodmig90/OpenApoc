@@ -1,7 +1,7 @@
 name: CMake (Windows)
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch: {}   # ручной запуск из Actions
 
 jobs:
   build-win-debug:
@@ -13,7 +13,7 @@ jobs:
         with:
           submodules: recursive
 
-      # MSYS2 с нужными пакетами (gcc, cmake, ninja, Qt6, SDL2, boost, vorbis)
+      # MSYS2: GCC, CMake, Ninja, Qt6, SDL2, Boost, Ogg/Vorbis
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -30,30 +30,38 @@ jobs:
             mingw-w64-x86_64-boost
             mingw-w64-x86_64-libvorbis
             mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-openal   # звук (на всякий)
 
       - name: Configure (Debug)
         shell: msys2 {0}
+        env:
+          CMAKE_PREFIX_PATH: /mingw64
+          PKG_CONFIG_PATH: /mingw64/lib/pkgconfig
+          PATH: /mingw64/bin:/usr/bin
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
             -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-            -DUSE_PCH=ON
+            -DUSE_PCH=OFF
 
       - name: Build (Debug)
         shell: msys2 {0}
         run: cmake --build build --config Debug --parallel
 
-      # Упаковываем exe, dll и папку data
+      # Пакуем exe + папку data (без 7z, только встроенный Compress-Archive)
       - name: Pack Debug
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p out
-          7z a -tzip out/OpenApoc-win64-debug.zip ./build/*.exe ./build/*.dll ./data/*
+          New-Item -ItemType Directory -Path out -Force | Out-Null
+          $exe  = Get-ChildItem -Path build -Recurse -Filter OpenApoc*.exe
+          if(-not $exe){ throw "OpenApoc.exe not found in build/" }
+          $items = @($exe.FullName, (Join-Path $pwd 'data\*'))
+          Compress-Archive -Path $items -DestinationPath out\OpenApoc-win64-debug.zip -Force
 
       - name: Upload Debug Artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenApoc-win64-debug
-          path: out/OpenApoc-win64-debug.zip
-          if-no-files-found: warn
+          path: out\OpenApoc-win64-debug.zip
+          if-no-files-found: error
