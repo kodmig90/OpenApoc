@@ -13,7 +13,7 @@ jobs:
         with:
           submodules: recursive
 
-      # MSYS2: GCC, CMake, Ninja, Qt6, SDL2, Boost, Ogg/Vorbis
+      # MSYS2: GCC, CMake, Ninja, Qt6, SDL2, Boost, Ogg/Vorbis, OpenAL, zip
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -30,7 +30,8 @@ jobs:
             mingw-w64-x86_64-boost
             mingw-w64-x86_64-libvorbis
             mingw-w64-x86_64-libogg
-            mingw-w64-x86_64-openal   # звук (на всякий)
+            mingw-w64-x86_64-openal
+            mingw-w64-x86_64-zip
 
       - name: Configure (Debug)
         shell: msys2 {0}
@@ -49,19 +50,18 @@ jobs:
         shell: msys2 {0}
         run: cmake --build build --config Debug --parallel
 
-      # Пакуем exe + папку data (без 7z, только встроенный Compress-Archive)
+      # Пакуем exe + dll + папку data с помощью zip из MSYS2
       - name: Pack Debug
-        shell: pwsh
+        shell: msys2 {0}
         run: |
-          New-Item -ItemType Directory -Path out -Force | Out-Null
-          $exe  = Get-ChildItem -Path build -Recurse -Filter OpenApoc*.exe
-          if(-not $exe){ throw "OpenApoc.exe not found in build/" }
-          $items = @($exe.FullName, (Join-Path $pwd 'data\*'))
-          Compress-Archive -Path $items -DestinationPath out\OpenApoc-win64-debug.zip -Force
+          mkdir -p out
+          # проверим, что бинарник существует
+          test -f build/OpenApoc.exe || (echo "OpenApoc.exe not found" && ls -la build && exit 1)
+          zip -r out/OpenApoc-win64-debug.zip build/OpenApoc.exe build/*.dll data
 
       - name: Upload Debug Artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenApoc-win64-debug
-          path: out\OpenApoc-win64-debug.zip
+          path: out/OpenApoc-win64-debug.zip
           if-no-files-found: error
