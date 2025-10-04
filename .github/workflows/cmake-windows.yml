@@ -1,0 +1,48 @@
+name: CMake (Windows)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-win-debug:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Устанавливаем Qt6 (требуется проекту)
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.5.3
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+
+      - name: Configure (Debug)
+        shell: pwsh
+        run: cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build (Debug)
+        shell: pwsh
+        run: cmake --build build --config Debug --parallel
+
+      # Пакуем exe + dll + data (минимально)
+      - name: Pack Debug
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path out -Force | Out-Null
+          Compress-Archive -Path `
+            build\**\*.exe, `
+            build\**\*.dll, `
+            data\* `
+            -DestinationPath out\OpenApoc-win64-debug.zip -Force
+
+      - name: Upload Debug Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenApoc-win64-debug
+          path: out\OpenApoc-win64-debug.zip
+          if-no-files-found: warn
